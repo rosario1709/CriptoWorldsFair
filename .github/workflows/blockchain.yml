@@ -1,0 +1,60 @@
+name: Real Solana escrow
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      [
+        "programs/**",
+        "packages/solana/**",
+        "tests/chain.ts",
+        "Cargo.toml",
+        "Anchor.toml",
+        ".github/workflows/blockchain.yml",
+      ]
+jobs:
+  local-validator:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: proofcommerce
+          POSTGRES_PASSWORD: proofcommerce
+          POSTGRES_DB: proofcommerce
+        ports: [5432:5432]
+        options: --health-cmd "pg_isready -U proofcommerce" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libudev-dev libssl-dev pkg-config build-essential
+      - run: sh -c "$(curl -sSfL https://release.anza.xyz/v2.3.0/install)"
+      - run: echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - run: cargo install anchor-cli --version 0.32.1 --locked
+      - run: pnpm install --frozen-lockfile && cp .env.example .env
+      - run: pnpm db:migrate && pnpm db:seed
+      - run: |
+          mkdir -p .local
+          solana-test-validator --ledger .local/ledger > .local/validator.log 2>&1 &
+          for i in $(seq 1 60); do solana cluster-version --url http://127.0.0.1:8899 && break; sleep 1; done
+      - run: pnpm chain:deploy && pnpm token:create && pnpm test:chain
+      - run: cargo test -p proofcommerce --lib
+      - run: |
+          pnpm dev:api > .local/api.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4000/health && break; sleep 1; done
+          pnpm demo:success && pnpm demo:failure
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: E2E_CHAIN=true pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-chain-validation
+          path: |
+            .local/validator.log
+            .local/api.log
+            .local/screenshots/
