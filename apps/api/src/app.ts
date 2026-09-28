@@ -80,8 +80,11 @@ export function createApp(
     let chain = false;
     try {
       chain = await (await gateway()).health();
-    } catch {
-      /* Readiness is false, never simulated. */
+    } catch (error) {
+      console.error(
+        "chain.health.error",
+        error instanceof Error ? error.message : String(error),
+      );
     }
     res.json({
       status: "ok",
