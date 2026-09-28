@@ -1,15 +1,23 @@
 [toolchain]
 anchor_version = "0.32.1"
 solana_version = "2.3.0"
+
 [features]
 resolution = true
 skip-lint = false
-[programs.localnet]
-proofcommerce = "Fg6PaFpoGXkYsidMpWxTWqkZqg5RGqG6W2BeZ7FEfcYkg"
+
 [programs.devnet]
-proofcommerce = "Fg6PaFpoGXkYsidMpWxTWqkZqg5RGqG6W2BeZ7FEfcYkg"
+proofcommerce = "GwhBjtoAfoenUgtNGr4iEpCGMke75bYHQ5vN5mqeWyem"
+
+[programs.localnet]
+proofcommerce = "GwhBjtoAfoenUgtNGr4iEpCGMke75bYHQ5vN5mqeWyem"
+
+[registry]
+url = "https://api.apr.dev"
+
 [provider]
-cluster = "Localnet"
+cluster = "devnet"
 wallet = ".local/keys/operator.json"
+
 [scripts]
 test = "pnpm test:chain"

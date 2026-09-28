@@ -25,7 +25,7 @@ try {
     "verifier",
   ]) {
     const k = await key(name);
-    if ((await connection.getBalance(k.publicKey)) < 1000000000) {
+    if (process.env.SOLANA_NETWORK === "localnet" && (await connection.getBalance(k.publicKey)) < 1000000000) {
       const signature = await connection.requestAirdrop(
         k.publicKey,
         2000000000,

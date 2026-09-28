@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{associated_token::AssociatedToken, token::{self, Mint, Token, TokenAccount, TransferChecked}};
 
-declare_id!("Fg6PaFpoGXkYsidMpWxTWqkZqg5RGqG6W2BeZ7FEfcYkg");
+declare_id!("GwhBjtoAfoenUgtNGr4iEpCGMke75bYHQ5vN5mqeWyem");
 
 #[program]
 pub mod proofcommerce {
