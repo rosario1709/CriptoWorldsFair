@@ -1,0 +1,15 @@
+BEGIN;
+CREATE TABLE IF NOT EXISTS agents (id text PRIMARY KEY, public_key text NOT NULL UNIQUE, data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS services (id text PRIMARY KEY, slug text NOT NULL UNIQUE, provider_id text NOT NULL REFERENCES agents(id), data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS agreements (id text PRIMARY KEY, buyer_id text NOT NULL REFERENCES agents(id), provider_id text NOT NULL REFERENCES agents(id), service_id text NOT NULL REFERENCES services(id), data jsonb NOT NULL);
+CREATE INDEX IF NOT EXISTS agreements_buyer ON agreements(buyer_id);
+CREATE INDEX IF NOT EXISTS agreements_provider ON agreements(provider_id);
+CREATE TABLE IF NOT EXISTS events (sequence bigserial PRIMARY KEY, id text NOT NULL UNIQUE, agreement_id text NOT NULL REFERENCES agreements(id), data jsonb NOT NULL);
+CREATE INDEX IF NOT EXISTS events_agreement ON events(agreement_id,sequence);
+CREATE TABLE IF NOT EXISTS evidence (id text PRIMARY KEY, agreement_id text NOT NULL REFERENCES agreements(id), data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS verifications (id text PRIMARY KEY, agreement_id text NOT NULL REFERENCES agreements(id), data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS payments (signature text PRIMARY KEY, agreement_id text NOT NULL REFERENCES agreements(id), kind text NOT NULL, amount text NOT NULL);
+CREATE TABLE IF NOT EXISTS idempotency (key text PRIMARY KEY, fingerprint text NOT NULL, response jsonb NOT NULL, created_at timestamp NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS nonces (nonce text PRIMARY KEY, wallet text NOT NULL, expires timestamp NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions (token_hash text PRIMARY KEY, wallet text NOT NULL, expires timestamp NOT NULL);
+COMMIT;
