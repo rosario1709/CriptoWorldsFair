@@ -132,10 +132,30 @@ export class SolanaEscrow implements EscrowGateway {
   }
   async health() {
     try {
-      return Boolean(
-        (await this.connection.getAccountInfo(this.programId))?.executable,
+      const info = await this.connection.getAccountInfo(this.programId);
+
+      if (!info) {
+        console.error(
+          "solana.health.no_account",
+          this.programId.toBase58(),
+        );
+        return false;
+      }
+
+      if (!info.executable) {
+        console.error(
+          "solana.health.not_executable",
+          this.programId.toBase58(),
+        );
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error(
+        "solana.health.rpc_error",
+        error instanceof Error ? error.message : String(error),
       );
-    } catch {
       return false;
     }
   }
