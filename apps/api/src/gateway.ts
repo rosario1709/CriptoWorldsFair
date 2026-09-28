@@ -13,7 +13,8 @@ export async function gateway(a?: Agreement) {
   );
   const provider = await DevelopmentSigner.fromFile(
     a?.providerAgentId === "malicious" && config.demo
-      ? ".local/keys/malicious.json"
+      ? (process.env.MALICIOUS_SIGNER_KEY_PATH ??
+        ".local/keys/malicious.json")
       : (process.env.PROVIDER_SIGNER_KEY_PATH ?? ".local/keys/provider.json"),
   );
   const verifier = await DevelopmentSigner.fromFile(
