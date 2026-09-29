@@ -1,45 +1,375 @@
 # ▧ ProofCommerce
 
-**Trust & Settlement Infrastructure for Autonomous AI Agents**
+### Proof before payment for autonomous AI agents.
 
-> AI agents can spend money. ProofCommerce makes sure they only pay when the job is actually done.
+**ProofCommerce is trust and settlement infrastructure for agent-to-agent commerce.**
 
-Payments establish that money moved. They do not establish that the requested work was delivered. ProofCommerce separates payment authorization, evidence submission and settlement: discover a service, define requirements, escrow SPL tokens, commit evidence, verify and settle or refund.
+AI agents can discover services, call APIs and spend money. The missing piece is knowing whether the requested work was actually delivered before funds are released.
 
-**Validation status:** the application builds and its PostgreSQL-backed tests run on this Windows workspace. The Anchor source and real-chain test suite are implemented, but compilation, deployment and financial demos have **not yet been validated** here because Rust, Anchor, Solana and WSL are absent. Do not represent this as an already demonstrated on-chain MVP. See [the validation record](docs/VALIDATION.md).
+ProofCommerce separates **payment authorization**, **delivery evidence**, **verification**, and **settlement**.
 
-The weather output is a deterministic fixture. Verification proves agreed structure, counts, freshness and hash integrity, **not weather accuracy**. `pcUSD — Test Stablecoin` is a six-decimal SPL test mint, not USDC or legal tender.
+A buyer agent defines a job and locks funds in a Solana escrow. The provider executes the service and submits cryptographically committed evidence. ProofCommerce verifies the delivery against the agreed requirements and only then releases payment.
+
+If verification fails, settlement is blocked and the buyer can recover the funds.
+
+---
+
+## Live Demo
+
+**Application:** https://proofcommerce.vercel.app
+**Marketplace:** https://proofcommerce.vercel.app/marketplace
+**Dashboard:** https://proofcommerce.vercel.app/dashboard
+**API Health:** https://proofcommerce.vercel.app/api/health
+**Source Code:** https://github.com/rosario1709/CriptoWorldsFair
+
+### Solana Devnet
+
+**Program ID**
+
+```text
+GwhBjtoAfoenUgtNGr4iEpCGMke75bYHQ5vN5mqeWyem
+```
+
+**pcUSD test mint**
+
+```text
+DWatwzfq8RopVFsEXoEuzV77SjNtbL3yWYnJhamzWaC5
+```
+
+`pcUSD` is a six-decimal SPL test token created for the prototype. It is not USDC, fiat currency, or legal tender.
+
+---
+
+## The Problem
+
+Payments prove that money moved.
+
+They do not prove that:
+
+- the requested work was completed;
+- the response matched the agreement;
+- the submitted evidence was not modified;
+- the correct provider performed the job;
+- the delivery satisfied the buyer's requirements.
+
+This becomes especially important when autonomous agents buy services from other autonomous agents.
+
+Traditional payment infrastructure solves transfer.
+
+**ProofCommerce adds verifiable conditional settlement.**
+
+---
+
+## How It Works
+
+```text
+Buyer Agent
+     │
+     ▼
+Discover Service
+     │
+     ▼
+Define Requirements
+     │
+     ▼
+Create Agreement
+     │
+     ▼
+Lock pcUSD in Solana Escrow
+     │
+     ▼
+Provider Executes Service
+     │
+     ▼
+Submit Canonical Evidence
+     │
+     ▼
+SHA-256 Commitment
+     │
+     ▼
+Deterministic Verification
+      ┌─────────────┴─────────────┐
+      ▼                           ▼
+    PASS                         FAIL
+      │                           │
+      ▼                           ▼
+Release Payment             Block Settlement
+      │                           │
+      ▼                           ▼
+Provider Paid                 Refund Buyer
+```
+
+The protocol flow is:
+
+```text
+discover → agree → escrow → execute → prove → verify → settle/refund
+```
+
+---
+
+## Public Devnet Proof
+
+ProofCommerce has been deployed and exercised on **Solana Devnet**.
+
+### Successful Settlement
+
+A buyer requested a seven-day weather dataset for Lima, Peru.
+
+The provider returned evidence satisfying the agreement:
+
+- correct schema;
+- city: Lima;
+- country: PE;
+- seven consecutive days;
+- fresh timestamp;
+- matching canonical evidence commitment.
+
+Verification passed and exactly **0.04 pcUSD** was released.
+
+**Settlement transaction**
+
+```text
+8jDfxJnKbonKp84yv2etoq7uz8kJnZNnuLVXCvLYrkA9p1358bNoq2GMLhzkLr9bQ4sQrQwMLcQ8XFAA8v6vsA1
+```
+
+Solana Explorer:
+
+https://explorer.solana.com/tx/8jDfxJnKbonKp84yv2etoq7uz8kJnZNnuLVXCvLYrkA9p1358bNoq2GMLhzkLr9bQ4sQrQwMLcQ8XFAA8v6vsA1?cluster=devnet
+
+Confirmed result:
+
+```text
+Instruction: ReleasePayment
+Status: Ok
+Finalized
+```
+
+### Invalid Delivery and Refund
+
+A malicious provider returned only **5 days** while the agreement required **7 days**.
+
+ProofCommerce rejected the delivery.
+
+```text
+Expected:     7 days
+Received:     5 days
+Verification: REJECTED
+Settlement:   BLOCKED
+Result:       REFUND
+```
+
+**Refund transaction**
+
+```text
+2jWrcVwvF38KwXexi3mpgyzMf4kt2Rb87U3YLW1YRzcPm7pHaUsDScncJX2YXj8cb22yxQE6k6TwFbBtPCivpo7s
+```
+
+Solana Explorer:
+
+https://explorer.solana.com/tx/2jWrcVwvF38KwXexi3mpgyzMf4kt2Rb87U3YLW1YRzcPm7pHaUsDScncJX2YXj8cb22yxQE6k6TwFbBtPCivpo7s?cluster=devnet
+
+Confirmed result:
+
+```text
+Instruction: Refund
+Status: Ok
+Finalized
+```
+
+> A provider cannot receive the escrowed payment merely by claiming the job is complete.
+
+---
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  B[Buyer Agent] --> SDK[TypeScript SDK]
-  SDK --> API[Agreement API]
-  API --> DB[(PostgreSQL / Drizzle)]
-  API --> S[Solana escrow PDA]
-  API --> P[Provider Agent]
-  P --> E[Canonical evidence / SHA-256]
-  E --> V[Deterministic verification]
-  V --> S
-  S -->|PASS| Pay[Provider ATA]
-  S -->|Rejection or expiry| Refund[Buyer ATA]
-  DB --> SSE[Durable SSE]
-  SSE --> Web[Next.js console]
+    B[Buyer Agent]
+    SDK[TypeScript SDK]
+    API[ProofCommerce API]
+    DB[(PostgreSQL)]
+    SOL[Solana Escrow Program]
+    P[Provider Agent]
+    E[Canonical Evidence]
+    H[SHA-256 Commitment]
+    V[Deterministic Verifier]
+    PAY[Provider Token Account]
+    REF[Buyer Token Account]
+    SSE[Event Stream]
+    WEB[Next.js Console]
+
+    B --> SDK
+    SDK --> API
+    API --> DB
+    API --> SOL
+    API --> P
+    P --> E
+    E --> H
+    H --> V
+    V --> SOL
+    SOL -->|PASS / Release| PAY
+    SOL -->|FAIL / Refund| REF
+    DB --> SSE
+    SSE --> WEB
 ```
 
-The MVP trusts a designated immutable verifier for each agreement. The program enforces authorities, terms, state and token movement; it cannot independently interpret an off-chain delivery. Development signers are disposable. See [architecture](docs/ARCHITECTURE.md), [protocol](docs/PROTOCOL.md) and [security](docs/SECURITY.md).
+### Hosted Architecture
+
+```text
+Browser
+   │
+   ▼
+Vercel
+Next.js Web
+   │
+   ▼
+/api/*
+Vercel Rewrite
+   │
+   ▼
+Render
+ProofCommerce API
+   ├──────────► Neon PostgreSQL
+   │
+   └──────────► Solana Devnet
+                    │
+                    ▼
+             ProofCommerce Program
+```
+
+The frontend uses a same-origin `/api` proxy through Vercel before forwarding requests to the hosted backend.
+
+---
+
+## What Is Verified?
+
+The current public demo uses deterministic verification. For the weather service, ProofCommerce checks properties including schema, city, country, number of days, consecutive dates, timestamp freshness, canonical evidence hash, on-chain commitment, agreement state and authorized actors.
+
+The weather output itself is a deterministic fixture. The demo proves that agreed delivery conditions can control financial settlement. It does **not** claim meteorological forecast accuracy.
+
+---
+
+## Trust Model
+
+The current MVP uses a designated verifier associated with each agreement.
+
+The Solana program enforces buyer authority, provider authority, verifier authority, payment mint, payment amount, escrow ownership, evidence commitment, agreement state, allowed state transitions, settlement destination, refund conditions, deadline behavior and replay protection.
+
+The Solana program does not attempt to independently interpret arbitrary off-chain work. Instead, the verifier evaluates the agreed requirements and the on-chain program enforces settlement rules and token movement.
+
+Future versions can extend this model with decentralized or consensus-based verification.
+
+---
+
+## Security Validation
+
+The real-chain test suite exercises adversarial cases including wrong buyer, wrong provider, wrong verifier, wrong token mint, zero-value agreements, immutable agreement amounts, unauthorized funding, invalid state transitions, premature withdrawal attempts, invalid evidence hashes, unauthorized verification, wrong settlement destination, unauthorized settlement, double settlement, refund after settlement, rejected delivery refunds, expired agreements and account-substitution drain attempts.
+
+Run the real-chain suite with:
+
+```sh
+pnpm test:chain
+```
+
+Chain tests require a deployed and funded Solana environment and do not silently downgrade financial execution to mocks.
+
+---
+
+## Product Surface
+
+### Marketplace
+
+Agents can discover services and inspect provider, price, category, verification method, availability and service requirements.
+
+### Agreements
+
+Each agreement exposes buyer, provider, requirements, price, escrow state, evidence, verification result, settlement state and transaction history.
+
+### Dashboard
+
+The dashboard provides visibility into active agreements, agent activity, settlements, refunds, events, network configuration and chain readiness.
+
+### Agent SDK
+
+The TypeScript SDK allows software agents to interact programmatically with ProofCommerce.
+
+---
+
+## SDK Example
+
+```ts
+import { ProofCommerce } from "@proofcommerce/sdk";
+
+const client = new ProofCommerce({
+  baseUrl: "http://127.0.0.1:4000",
+  network: "localnet",
+  demo: true,
+});
+
+const result = await client.buy({
+  service: "weather-7d",
+  requirements: {
+    city: "Lima",
+    country: "PE",
+    days: 7,
+  },
+  maxPrice: "0.05",
+  idempotencyKey: "my-persistent-job-001",
+});
+```
+
+Financial amounts use decimal strings and bigint-compatible arithmetic rather than floating-point financial calculations.
+
+---
+
+## Repository Structure
+
+```text
+apps/
+├── api/                 Express API, workflow and wallet sessions
+└── web/                 Next.js marketplace and console
+
+programs/
+└── proofcommerce/       Anchor Solana escrow program
+
+packages/
+├── sdk/                 Typed ProofCommerce client
+├── shared/              Schemas, policy and state machine
+├── solana/              Solana integration and signing adapters
+├── verifier/            Canonicalization and deterministic verification
+└── x402/                x402 V2 interoperability adapters
+
+examples/                Weather, malicious-provider, buyer and x402 demos
+scripts/                 Database, wallet, token, deployment and demo tooling
+tests/                   Domain, API, real-chain attack and Playwright tests
+docs/                    Architecture, protocol, security, deployment and pitch material
+```
+
+---
+
+## Technology Stack
+
+**Blockchain:** Solana, Anchor 0.32.1, Rust, SPL Tokens
+**Backend:** Node.js, TypeScript, Express, Drizzle ORM, PostgreSQL, Neon
+**Frontend:** Next.js, React, TypeScript, Vercel
+**Infrastructure:** Vercel, Render, Neon PostgreSQL, Solana Devnet
+
+---
 
 ## Requirements
 
-- Node.js 22+ and pnpm 10.32.1.
-- PostgreSQL 17+ via Docker, an existing server or the portable PostgreSQL command.
-- Financial demos: Rust, Anchor **0.32.1**, Solana/Agave **2.3.0**, on Linux/macOS or Windows WSL. Follow the [official installation instructions](https://www.anchor-lang.com/docs/installation), pinning `Anchor.toml` versions. The project intentionally uses the Anchor 0.32 ABI.
-- Disposable wallets with test SOL for rent/fees. No paid AI API is required.
+- Node.js 22+
+- pnpm 10.32+
+- PostgreSQL
+- Rust
+- Anchor 0.32.1
+- Solana / Agave 2.3.0
 
-## Quickstart: application
+On Windows, Solana development is expected to run through WSL.
 
-Run from the repository root. PowerShell uses `Copy-Item .env.example .env` instead of `cp`.
+---
+
+## Quickstart
 
 ```sh
 pnpm install --frozen-lockfile
@@ -50,131 +380,238 @@ pnpm db:seed
 pnpm dev
 ```
 
-Without Docker, run `pnpm db:portable` in a separate terminal instead of `pnpm db:start`. It runs real persistent PostgreSQL at `.local/postgres`, bound to loopback, with credentials matching `.env.example`.
+Without Docker:
 
-Open **http://localhost:3000/dashboard**. Health: **http://127.0.0.1:4000/health**. The console includes marketplace search, service requirements, agents, reputation, agreements, evidence and timelines. Missing escrow configuration is visible and prevents purchases.
+```sh
+pnpm db:portable
+```
 
-## Complete local Solana setup
+Application:
 
-After database setup, keep this running in a second terminal:
+```text
+http://localhost:3000
+```
+
+API health:
+
+```text
+http://127.0.0.1:4000/health
+```
+
+---
+
+## Local Solana Setup
 
 ```sh
 pnpm solana:local
-```
-
-Then run:
-
-```sh
 pnpm keys:create
 pnpm chain:deploy
 pnpm token:create
 pnpm dev
 ```
 
-`chain:deploy` creates an ignored program keypair, synchronizes the public program ID in Rust and `Anchor.toml`, invokes `anchor build`, deploys and writes `PROOFCOMMERCE_PROGRAM_ID` to `.env`. The checked-in initial program ID is a build placeholder, **not a deployed address**. Commit the public ID when choosing a persistent deployment.
-
-`token:create` airdrops test SOL, creates a six-decimal SPL mint if none is configured, creates participant ATAs, mints test tokens to the buyer, and updates `.env` plus the buyer mint allowlist. Restart API processes after changes. Seed can run before the validator; it creates identities/services only.
+Run the real-chain test suite:
 
 ```sh
 pnpm test:chain
+```
+
+Run the demo flows:
+
+```sh
 pnpm demo:success
 pnpm demo:failure
 pnpm demo:buyer
 ```
 
-Success must print a real confirmed signature. Failure must print expected seven / received five, blocked settlement and a confirmed refund. Both exit nonzero without a configured chain. Standalone providers run with `pnpm provider:weather` and `pnpm provider:malicious`; the integrated demo invokes the same provider function in process.
+---
 
-Do not reset the validator while retaining an old mint/program/database as if it were the same chain. Use a fresh database and configuration for a new ledger.
+## Devnet Deployment
 
-## Devnet
-
-Set `SOLANA_NETWORK=devnet`, `SOLANA_RPC_URL=https://api.devnet.solana.com`, and clear mint/program IDs from any local ledger. Use a separate database. Run `chain:deploy` and `token:create`. Faucet rate limits may require pre-funding generated public wallets with test SOL. The documented workflow does not support mainnet.
-
-Devnet signatures link to Solana Explorer. Local signatures are displayed as local records, never linked as devnet transactions.
-
-## x402 V2
-
-x402 is instant pay-per-request interoperability, separate from ProofCommerce Verified Escrow. No custom scheme is advertised. The adapter delegates verification and settlement to reference `@x402/svm` code and explicitly prices the test mint.
-
-After real-chain/token setup, run these in separate terminals:
-
-```sh
-pnpm x402:facilitator
-pnpm x402:server
-pnpm demo:x402
+```text
+SOLANA_NETWORK=devnet
+SOLANA_RPC_URL=https://api.devnet.solana.com
 ```
 
-The loopback facilitator allowlists network/mint/recipient/amount and uses the operator wallet for fees. The client caps its amount before signing. Local CAIP-2 is derived from the validator genesis; devnet uses `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`. Headers: `PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`, `PAYMENT-RESPONSE`. See [x402 details](docs/X402.md) and the [official guide](https://solana.com/docs/payments/agentic-payments/x402). The handshake is tested; paid settlement awaits real-chain validation.
+Program:
 
-## SDK
-
-```ts
-import { ProofCommerce } from "@proofcommerce/sdk";
-const client = new ProofCommerce({
-  baseUrl: "http://127.0.0.1:4000",
-  network: "localnet",
-  demo: true,
-});
-const result = await client.buy({
-  service: "weather-7d",
-  requirements: { city: "Lima", country: "PE", days: 7 },
-  maxPrice: "0.05", // decimal strings, bigint financial arithmetic
-  idempotencyKey: "my-persistent-job-001",
-});
+```text
+GwhBjtoAfoenUgtNGr4iEpCGMke75bYHQ5vN5mqeWyem
 ```
 
-One-call orchestration uses authorized demo identities. Outside demo mode, buyer/provider/verifier use separate sessions and their authorized endpoints. SDK `SessionSigner.signMessage()` handles login; server `AgentSigner.signTransaction()` is a separate interface. An external wallet session does not grant the backend possession of its transaction signer. [API/SDK reference](docs/API.md).
+Payment token:
 
-## Verification commands
+```text
+DWatwzfq8RopVFsEXoEuzV77SjNtbL3yWYnJhamzWaC5
+```
+
+The public prototype targets Solana Devnet. It is **not presented as an audited mainnet financial protocol**.
+
+---
+
+## Verification Commands
 
 ```sh
 pnpm lint
 pnpm typecheck
-pnpm test                     # migrated PostgreSQL required
+pnpm test
 pnpm build
 pnpm exec playwright install chromium
-pnpm test:e2e                 # chain cases explicitly skipped by default
+pnpm test:e2e
 pnpm chain:build
-pnpm test:chain               # deployed/funded chain required; never silently skips
+pnpm test:chain
 E2E_CHAIN=true pnpm test:e2e
 ```
 
-PowerShell: `$env:E2E_CHAIN='true'; pnpm test:e2e`. API integration tests inject a labeled ledger double inside `tests/` only. They prove orchestration/database behavior, not Rust correctness. Real-chain tests send actual attacks and check SPL balances.
+---
 
-## Repository
+## x402 V2
+
+ProofCommerce also contains experimental x402 V2 interoperability.
 
 ```text
-apps/api/                 Express, wallet sessions, workflow, Drizzle, migrations
-apps/web/                 Next.js, Tailwind, Radix/shadcn-style components, console
-programs/proofcommerce/   Anchor escrow and Rust tests
-packages/shared/          Schemas, state machine, policy, reputation
-packages/solana/          AgentSigner, isolated Anchor-compatible web3 adapter
-packages/verifier/        Deterministic checks, canonical hash, optional LLM advice
-packages/sdk/             Typed agent API client
-packages/x402/            V2 exact-SVM adapters
-examples/                 Weather, malicious weather, buyer, x402 service/facilitator
-scripts/                  Database, keys, mint, deployment and demos
-tests/                    Domain/API/x402, real-chain attacks, Playwright
-docs/                     Protocol, security, deployment, Colosseum materials
-.github/workflows/        Application CI and separate blockchain CI
+x402
+instant pay-per-request
+
+ProofCommerce
+escrow → delivery → verification → conditional settlement
 ```
 
-## Configuration
+The x402 integration is supplementary. **Verified Escrow is the core protocol demonstrated by the public ProofCommerce MVP.**
 
-Copy [.env.example](.env.example). Financial execution requires `DATABASE_URL`, `SOLANA_RPC_URL`, `SOLANA_NETWORK`, `PROOFCOMMERCE_PROGRAM_ID`, `PAYMENT_TOKEN_MINT`, buyer/provider/verifier signer paths and `VERIFIER_PUBLIC_KEY`. The setup scripts fill public mint/program/verifier values. `NEXT_PUBLIC_API_URL` is provided at web build time; `CORS_ORIGIN` must exactly match the web origin. `DEMO_MODE=true` enables local actors and is blocked under `NODE_ENV=production`.
+See [docs/X402.md](docs/X402.md).
 
-Optional: `PROVIDER_ALLOWED_ORIGINS`, `X402_FACILITATOR_URL`, `X402_RESOURCE_URL`, `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`. The Ollama-compatible LLM adapter is advisory and never authorizes settlement. No secrets belong in `NEXT_PUBLIC_*` settings. Setup scripts currently use `.local/keys/operator.json` for operator signing.
+---
 
-## Deployment, business and roadmap
+## Public Deployment
 
-Web: Vercel or Next standalone. API: [Dockerfile](Dockerfile), compatible with container hosts. DB: PostgreSQL. See [deployment instructions](docs/DEPLOYMENT.md). Do not host DEMO_MODE with real assets. Use independently constrained signing adapters, tenant-aware authorization, durable long-range transaction reconciliation and audited upgrade governance before production.
+```text
+Frontend     Vercel
+API          Render
+Database     Neon PostgreSQL
+Blockchain   Solana Devnet
+```
 
-No protocol fee is collected. The conceptual 0.25% hypothesis and future Protocol/SDK/Cloud products are in [BUSINESS.md](docs/BUSINESS.md).
+Production frontend requests use:
 
-Roadmap: decentralized verification, consensus, MCP, A2A, production stablecoins, confidential payments, cross-chain, arbitration, ZK proofs and enterprise policies. These are not implemented claims.
+```text
+NEXT_PUBLIC_API_URL=/api
+```
 
-[Colosseum draft](docs/COLOSSEUM.md) · [Demo runbook](docs/DEMO.md) · [Pitch](docs/PITCH.md) · [Technical video](docs/DEMO_VIDEO.md)
+Vercel forwards these requests to the backend using `API_UPSTREAM_URL`.
 
-Submission URL and public repository URL: **pending publication**. Set `NEXT_PUBLIC_GITHUB_URL` to show the repository link on the landing page.
+Database credentials, wallet material and signer keys remain server-side. Secrets must never be stored in `NEXT_PUBLIC_*` variables.
 
-License: [MIT](LICENSE).
+---
+
+## Current MVP Limitations
+
+ProofCommerce is an experimental hackathon prototype.
+
+Current limitations include:
+
+- designated verifier per agreement;
+- Solana Devnet instead of mainnet;
+- test payment token;
+- deterministic service examples;
+- development signers;
+- no decentralized verifier consensus;
+- no production arbitration layer;
+- no audited mainnet upgrade governance.
+
+---
+
+## Roadmap
+
+Potential future work includes decentralized verification, multi-verifier consensus, MCP integrations, Agent-to-Agent protocol integrations, production stablecoins, arbitration, confidential payments, cross-chain settlement, zero-knowledge delivery proofs, enterprise authorization policies, and reputation and staking mechanisms.
+
+---
+
+## Business Model
+
+The MVP currently collects no protocol fee.
+
+Potential monetization includes settlement fees, agent infrastructure, verification services, analytics and enterprise policies.
+
+An initial market wedge is deterministic digital services that autonomous agents can purchase and evaluate programmatically, including structured data, API execution, AI inference, translation, research and machine-generated digital work.
+
+See [docs/BUSINESS.md](docs/BUSINESS.md).
+
+---
+
+## Why Solana?
+
+ProofCommerce needs infrastructure suitable for machine-to-machine transactions.
+
+Solana provides low transaction costs, fast settlement, programmable escrow, SPL token support, deterministic account ownership and composability with agent payment infrastructure.
+
+The blockchain is not used to perform the provider's computation. It acts as the **neutral settlement layer controlling the escrowed assets**.
+
+---
+
+## Built for Colosseum Crypto World's Fair 2026
+
+ProofCommerce was built as a submission for **Colosseum Crypto World's Fair 2026**.
+
+The project demonstrates an end-to-end autonomous-commerce flow on Solana Devnet:
+
+```text
+Service Discovery
+        │
+        ▼
+Agreement
+        │
+        ▼
+Token Escrow
+        │
+        ▼
+Provider Execution
+        │
+        ▼
+Evidence Commitment
+        │
+        ▼
+Deterministic Verification
+        │
+     ┌──┴──┐
+     ▼     ▼
+   Settle Refund
+```
+
+Stable submission snapshot:
+
+```text
+hackathon-submission-v3
+```
+
+---
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Protocol](docs/PROTOCOL.md)
+- [Security](docs/SECURITY.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Business](docs/BUSINESS.md)
+- [Demo Runbook](docs/DEMO.md)
+- [Pitch](docs/PITCH.md)
+- [Technical Demo Video](docs/DEMO_VIDEO.md)
+- [Colosseum Materials](docs/COLOSSEUM.md)
+
+---
+
+## Philosophy
+
+Autonomous agents should not have to trust a provider simply because the provider says:
+
+> The work is complete.
+
+ProofCommerce makes the financial action depend on verifiable delivery.
+
+### Proof before payment.
+
+---
+
+## License
+
+[MIT](LICENSE)
